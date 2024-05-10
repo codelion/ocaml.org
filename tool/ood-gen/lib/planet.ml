@@ -380,6 +380,17 @@ module GlobalFeed = struct
     create_ocamlorg_feed () |> Syndic.Atom.to_xml
     |> Syndic.XML.to_string ~ns_prefix:(fun s ->
            match s with "http://www.w3.org/2005/Atom" -> Some "" | _ -> None)
+
+  let command =
+    let open Cmdliner in
+    let open Cmdliner.Term in
+    const (fun () -> print_endline (create_feed ()))
+    $ const ()
+
+  let info =
+    let open Cmdliner in
+    let doc = "Generates a global atom feed for the OCaml events." in
+    info ~doc "feed"
 end
 
 module Scraper = struct
