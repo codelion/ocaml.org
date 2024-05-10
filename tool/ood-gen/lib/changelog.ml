@@ -89,10 +89,10 @@ let all () =
   Utils.map_files decode "changelog/*/*.md"
   |> List.sort (fun a b -> String.compare b.slug a.slug)
 
-module ChangelogFeed = struct
-  let create_changelog_feed () =
-    let id = Uri.of_string "https://ocaml.org/changelog.xml" in
-    let title : Syndic.Atom.title = Text "OCaml Changelog" in
+module EventFeed = struct
+  let create_event_feed () =
+    let id = Uri.of_string "https://ocaml.org/events.xml" in
+    let title : Syndic.Atom.title = Text "OCaml Events" in
     let now = Ptime.of_float_s (Unix.gettimeofday ()) |> Option.get in
     let cutoff_date =
       Ptime.sub_span now (Ptime.Span.v (365, 0L)) |> Option.get
@@ -100,17 +100,17 @@ module ChangelogFeed = struct
 
     let entries =
       all ()
-      |> List.map (fun (log : t) ->
-             let content = Syndic.Atom.Html (None, log.body_html) in
+      |> List.map (fun (event : t) ->
+             let content = Syndic.Atom.Html (None, event.body_html) in
              let id =
-               Uri.of_string ("https://ocaml.org/changelog/" ^ log.slug)
+               Uri.of_string ("https://ocaml.org/events/" ^ event.slug)
              in
              let authors = (Syndic.Atom.author "Ocaml.org", []) in
              let updated =
-               Syndic.Date.of_rfc3339 (log.date ^ "T00:00:00-00:00")
+               Syndic.Date.of_rfc3339 (event.date ^ "T00:00:00-00:00")
              in
              Syndic.Atom.entry ~content ~id ~authors
-               ~title:(Syndic.Atom.Text log.title) ~updated
+               ~title:(Syndic.Atom.Text event.title) ~updated
                ~links:[ Syndic.Atom.link id ]
                ())
       |> List.filter (fun (entry : Syndic.Atom.entry) ->
@@ -122,7 +122,7 @@ module ChangelogFeed = struct
     Syndic.Atom.feed ~id ~title ~updated entries
 
   let create_feed () =
-    create_changelog_feed () |> Syndic.Atom.to_xml
+    create_event_feed () |> Syndic.Atom.to_xml
     |> Syndic.XML.to_string ~ns_prefix:(fun s ->
            match s with "http://www.w3.org/2005/Atom" -> Some "" | _ -> None)
 end
@@ -145,3 +145,51 @@ let all = %a
 |}
     (Fmt.brackets (Fmt.list pp ~sep:Fmt.semi))
     (all ())
+```
+```ocaml
+open Cmdliner
+open Ood_gen
+
+let () =
+  let open Term in
+  let default_cmd =
+      ret (const (`Help (`Pager, None))), info ~version:"v0.1" "ood-gen"
+    in
+    let commands = [
+      ChangelogFeed.create_feed_cmd,
+      EventFeed.create_feed_cmd
+    ] in
+    eval_choice default_cmd commands;
+    exit_exit ()
+```
+
+In dune:
+
+```dune
+(executable
+ (name gen)
+ (libraries ood_gen))
+
+(alias
+  (name gen_rss_feeds)
+  (deps
+    ./ood-gen
+    (sources_recursively_in ./tool/ood-gen/lib)
+    (sources_recursively_in ./tool/ood-gen/bin))
+  (action (run ./ood-gen gen)))
+
+(rule
+  (targets changelog.xml)
+  (deps ./ood-gen/gen_rss_feeds)
+  (action (probe)))
+
+(rule
+  (targets events.xml)
+  (deps ./ood-gen/gen_rss_feeds)
+  (action (probe)))
+```
+
+In events.eml:
+
+```html
+<a href="/events.xml">RSS Feed</a>
